@@ -1,4 +1,6 @@
 mod cli;
+mod config;
+mod domain;
 
 use clap::Parser;
 use cli::{Cli, Commands};
