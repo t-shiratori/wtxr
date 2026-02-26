@@ -1,6 +1,8 @@
+mod adapter;
 mod cli;
 mod config;
 mod domain;
+mod port;
 
 use clap::Parser;
 use cli::{Cli, Commands};
