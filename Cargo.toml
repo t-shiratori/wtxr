@@ -29,3 +29,7 @@ dirs = "5"
 
 # globパターン
 glob = "0.3"
+
+[dev-dependencies]
+# テスト用一時ディレクトリ
+tempfile = "3"
