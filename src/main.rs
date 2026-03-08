@@ -3,6 +3,7 @@ mod cli;
 mod config;
 mod domain;
 mod port;
+mod tui;
 mod usecase;
 
 use clap::Parser;

@@ -5,6 +5,8 @@ use crate::config::load_config;
 use crate::config::paths::resolve_input_worktree_path;
 use crate::domain::worktree::RemoveOptions;
 use crate::port::git::GitRepository;
+use crate::tui::select::select_worktrees;
+use crate::usecase::list::ListWorktrees;
 use crate::usecase::remove::RemoveWorktree;
 
 #[derive(Args)]
@@ -26,19 +28,39 @@ pub struct RemoveArgs {
 }
 
 pub fn run(args: &RemoveArgs) -> anyhow::Result<()> {
-    if args.worktrees.is_empty() {
-        // 引数なし → Step 7 で TUI を実装予定
-        eprintln!("No worktree specified. Interactive selection coming soon (Step 7).");
-        return Ok(());
-    }
-
     let git = GitAdapter::new();
     let repo_root = git.repo_root()?;
     let cfg = load_config(&repo_root)?;
 
-    for input in &args.worktrees {
-        let path = resolve_input_worktree_path(&repo_root, &cfg, input)?;
+    // 削除対象のパス一覧を解決する
+    // 引数なしなら TUI で対話的に選択
+    let paths = if args.worktrees.is_empty() {
+        let all = ListWorktrees::new(&git).execute()?;
+        // メインのワークツリー（最初のエントリ）は除外する
+        let candidates: Vec<_> = all.into_iter().skip(1).collect();
 
+        if candidates.is_empty() {
+            println!("No worktrees to remove.");
+            return Ok(());
+        }
+
+        match select_worktrees(candidates)? {
+            Some(selected) if !selected.is_empty() => {
+                selected.into_iter().map(|wt| wt.path).collect()
+            }
+            _ => {
+                println!("No worktrees selected.");
+                return Ok(());
+            }
+        }
+    } else {
+        args.worktrees
+            .iter()
+            .map(|input| resolve_input_worktree_path(&repo_root, &cfg, input))
+            .collect::<anyhow::Result<Vec<_>>>()?
+    };
+
+    for path in paths {
         if args.dry_run {
             print_dry_run(&path, args);
             continue;
