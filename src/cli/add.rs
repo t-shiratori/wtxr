@@ -2,6 +2,7 @@ use clap::Args;
 
 use crate::adapter::filesystem::FsAdapter;
 use crate::adapter::git::GitAdapter;
+use crate::adapter::hook::ShellHookRunner;
 use crate::config::load_config;
 use crate::domain::worktree::AddOptions;
 use crate::port::git::GitRepository;
@@ -42,7 +43,8 @@ pub fn run(args: &AddArgs) -> anyhow::Result<()> {
     }
 
     let fs = FsAdapter::new();
-    let uc = AddWorktree::new(&git, &fs, &cfg, &repo_root);
+    let hooks = ShellHookRunner::new();
+    let uc = AddWorktree::new(&git, &fs, &hooks, &cfg, &repo_root);
     uc.execute(&opts)?;
 
     println!("Added worktree for '{}'", opts.branch);

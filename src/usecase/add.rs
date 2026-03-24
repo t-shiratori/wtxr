@@ -5,10 +5,12 @@ use crate::config::paths::resolve_worktree_path;
 use crate::domain::worktree::AddOptions;
 use crate::port::filesystem::FileSystem;
 use crate::port::git::GitRepository;
+use crate::port::hook::HookRunner;
 
 pub struct AddWorktree<'a> {
     git: &'a dyn GitRepository,
     fs: &'a dyn FileSystem,
+    hooks: &'a dyn HookRunner,
     cfg: &'a Config,
     repo_root: &'a Path,
 }
@@ -17,22 +19,32 @@ impl<'a> AddWorktree<'a> {
     pub fn new(
         git: &'a dyn GitRepository,
         fs: &'a dyn FileSystem,
+        hooks: &'a dyn HookRunner,
         cfg: &'a Config,
         repo_root: &'a Path,
     ) -> Self {
-        Self { git, fs, cfg, repo_root }
+        Self { git, fs, hooks, cfg, repo_root }
     }
 
     pub fn execute(&self, opts: &AddOptions) -> anyhow::Result<()> {
         let worktree_path = resolve_worktree_path(self.repo_root, self.cfg, &opts.branch);
 
+        // pre_create フック（リポジトリルートで実行）
+        self.hooks.run(&self.cfg.hooks.pre_create, self.repo_root)?;
+
         // ワークツリーを作成
         self.git.add_worktree(&worktree_path, opts)?;
 
+        // post_create フック（ワークツリーで実行）
+        self.hooks.run(&self.cfg.hooks.post_create, &worktree_path)?;
+
         // 設定に基づいてファイルをコピー
-        if !self.cfg.copy.patterns.is_empty() || !self.cfg.copy.files.is_empty() {
-            self.fs
-                .copy_files(self.repo_root, &worktree_path, &self.cfg.copy)?;
+        let has_copy = !self.cfg.copy.patterns.is_empty() || !self.cfg.copy.files.is_empty();
+        if has_copy {
+            self.fs.copy_files(self.repo_root, &worktree_path, &self.cfg.copy)?;
+
+            // post_copy フック（ワークツリーで実行）
+            self.hooks.run(&self.cfg.hooks.post_copy, &worktree_path)?;
         }
 
         Ok(())
@@ -49,6 +61,7 @@ mod tests {
     use crate::domain::worktree::{AddOptions, Worktree};
     use crate::port::filesystem::FileSystem;
     use crate::port::git::GitRepository;
+    use crate::port::hook::HookRunner;
 
     struct MockGit {
         added: RefCell<Vec<(PathBuf, AddOptions)>>,
@@ -106,6 +119,26 @@ mod tests {
         }
     }
 
+    struct MockHooks {
+        // `ran` は run の過去形。「実行済みのフック呼び出し履歴」を表す
+        ran: RefCell<Vec<(Vec<String>, PathBuf)>>,
+    }
+
+    impl MockHooks {
+        fn new() -> Self {
+            Self { ran: RefCell::new(vec![]) }
+        }
+    }
+
+    impl HookRunner for MockHooks {
+        fn run(&self, commands: &[String], cwd: &Path) -> anyhow::Result<()> {
+            if !commands.is_empty() {
+                self.ran.borrow_mut().push((commands.to_vec(), cwd.to_path_buf()));
+            }
+            Ok(())
+        }
+    }
+
     fn default_opts(branch: &str) -> AddOptions {
         AddOptions {
             branch: branch.to_string(),
@@ -118,9 +151,10 @@ mod tests {
     fn worktree_path_is_resolved_from_branch() {
         let git = MockGit::new();
         let fs = MockFs::new();
+        let hooks = MockHooks::new();
         let cfg = Config::default();
         let repo_root = PathBuf::from("/repo");
-        let uc = AddWorktree::new(&git, &fs, &cfg, &repo_root);
+        let uc = AddWorktree::new(&git, &fs, &hooks, &cfg, &repo_root);
 
         uc.execute(&default_opts("feature/foo")).unwrap();
 
@@ -132,9 +166,10 @@ mod tests {
     fn file_copy_is_skipped_when_config_is_empty() {
         let git = MockGit::new();
         let fs = MockFs::new();
+        let hooks = MockHooks::new();
         let cfg = Config::default(); // copy が空
         let repo_root = PathBuf::from("/repo");
-        let uc = AddWorktree::new(&git, &fs, &cfg, &repo_root);
+        let uc = AddWorktree::new(&git, &fs, &hooks, &cfg, &repo_root);
 
         uc.execute(&default_opts("feature/foo")).unwrap();
 
@@ -145,15 +180,71 @@ mod tests {
     fn file_copy_is_called_when_patterns_exist() {
         let git = MockGit::new();
         let fs = MockFs::new();
+        let hooks = MockHooks::new();
         let mut cfg = Config::default();
         cfg.copy.patterns = vec!["*.env".to_string()];
         let repo_root = PathBuf::from("/repo");
-        let uc = AddWorktree::new(&git, &fs, &cfg, &repo_root);
+        let uc = AddWorktree::new(&git, &fs, &hooks, &cfg, &repo_root);
 
         uc.execute(&default_opts("feature/bar")).unwrap();
 
         let copied = fs.copied.borrow();
         assert_eq!(copied.len(), 1);
         assert_eq!(copied[0].1, PathBuf::from("/repo/.wtxr/worktrees/feature/bar"));
+    }
+
+    #[test]
+    fn pre_create_hook_runs_before_git() {
+        let git = MockGit::new();
+        let fs = MockFs::new();
+        let hooks = MockHooks::new();
+        let mut cfg = Config::default();
+        cfg.hooks.pre_create = vec!["echo pre".to_string()];
+        let repo_root = PathBuf::from("/repo");
+        let uc = AddWorktree::new(&git, &fs, &hooks, &cfg, &repo_root);
+
+        uc.execute(&default_opts("feature/foo")).unwrap();
+
+        let ran = hooks.ran.borrow();
+        assert_eq!(ran[0].0, vec!["echo pre"]);
+        assert_eq!(ran[0].1, repo_root); // リポジトリルートで実行
+    }
+
+    #[test]
+    fn post_create_and_post_copy_hooks_run_in_worktree() {
+        let git = MockGit::new();
+        let fs = MockFs::new();
+        let hooks = MockHooks::new();
+        let mut cfg = Config::default();
+        cfg.hooks.post_create = vec!["echo post-create".to_string()];
+        cfg.hooks.post_copy = vec!["echo post-copy".to_string()];
+        cfg.copy.patterns = vec!["*.env".to_string()];
+        let repo_root = PathBuf::from("/repo");
+        let uc = AddWorktree::new(&git, &fs, &hooks, &cfg, &repo_root);
+
+        uc.execute(&default_opts("feature/bar")).unwrap();
+
+        let ran = hooks.ran.borrow();
+        let worktree_path = PathBuf::from("/repo/.wtxr/worktrees/feature/bar");
+        assert_eq!(ran[0].0, vec!["echo post-create"]);
+        assert_eq!(ran[0].1, worktree_path);
+        assert_eq!(ran[1].0, vec!["echo post-copy"]);
+        assert_eq!(ran[1].1, worktree_path);
+    }
+
+    #[test]
+    fn post_copy_hook_is_skipped_when_no_copy_config() {
+        let git = MockGit::new();
+        let fs = MockFs::new();
+        let hooks = MockHooks::new();
+        let mut cfg = Config::default();
+        cfg.hooks.post_copy = vec!["echo post-copy".to_string()];
+        // copy 設定なし → post_copy も実行されない
+        let repo_root = PathBuf::from("/repo");
+        let uc = AddWorktree::new(&git, &fs, &hooks, &cfg, &repo_root);
+
+        uc.execute(&default_opts("feature/foo")).unwrap();
+
+        assert!(hooks.ran.borrow().is_empty());
     }
 }

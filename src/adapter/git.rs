@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{bail, Context};
+use anyhow::Context;
 
 use crate::domain::worktree::{AddOptions, Worktree};
 use crate::port::git::GitRepository;
@@ -21,12 +21,11 @@ impl GitAdapter {
             .output()
             .with_context(|| format!("failed to run: git {}", args.join(" ")))?;
 
-        if output.status.success() {
-            Ok(String::from_utf8_lossy(&output.stdout).into_owned())
-        } else {
+        if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-            bail!("git {} failed: {}", args.join(" "), stderr)
+            return Err(anyhow::anyhow!("git {} failed: {}", args.join(" "), stderr));
         }
+        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
     }
 }
 
