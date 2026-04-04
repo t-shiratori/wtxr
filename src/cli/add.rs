@@ -5,7 +5,9 @@ use crate::adapter::git::GitAdapter;
 use crate::adapter::hook::ShellHookRunner;
 use crate::config::load_config;
 use crate::domain::worktree::AddOptions;
+use crate::logger;
 use crate::port::git::GitRepository;
+use crate::spinner::Spinner;
 use crate::usecase::add::AddWorktree;
 
 #[derive(Args)]
@@ -42,12 +44,23 @@ pub fn run(args: &AddArgs) -> anyhow::Result<()> {
         return Ok(());
     }
 
+    logger::verbose(&format!("repo root: {}", repo_root.display()));
+    logger::verbose(&format!("branch: {}", opts.branch));
+
+    let spinner = Spinner::new(&format!("Adding worktree for '{}'…", opts.branch));
+
     let fs = FsAdapter::new();
     let hooks = ShellHookRunner::new();
     let uc = AddWorktree::new(&git, &fs, &hooks, &cfg, &repo_root);
-    uc.execute(&opts)?;
 
-    println!("Added worktree for '{}'", opts.branch);
+    match uc.execute(&opts) {
+        Ok(()) => spinner.success(&format!("Added worktree for '{}'", opts.branch)),
+        Err(e) => {
+            spinner.fail(&format!("Failed to add worktree for '{}'", opts.branch));
+            return Err(e);
+        }
+    }
+
     Ok(())
 }
 

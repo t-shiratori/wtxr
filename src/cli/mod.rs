@@ -13,6 +13,10 @@ pub mod remove;
     long_about = None,
 )]
 pub struct Cli {
+    /// Enable verbose output
+    #[arg(short = 'v', long = "verbose", global = true)]
+    pub verbose: bool,
+
     #[command(subcommand)]
     pub command: Commands,
 }
