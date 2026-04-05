@@ -6,6 +6,7 @@ use crate::adapter::hook::ShellHookRunner;
 use crate::config::load_config;
 use crate::domain::worktree::AddOptions;
 use crate::logger;
+use crate::port::git::GitRepository;
 use crate::spinner::Spinner;
 use crate::usecase::add::AddWorktree;
 
