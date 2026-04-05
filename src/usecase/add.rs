@@ -26,6 +26,69 @@ impl<'a> AddWorktree<'a> {
         Self { git, fs, hooks, cfg, repo_root }
     }
 
+    /// dry-run 用: 実際の操作は行わず実行予定の操作一覧を返す
+    pub fn plan(&self, opts: &AddOptions) -> super::DryRunPlan {
+        let worktree_path = resolve_worktree_path(self.repo_root, self.cfg, &opts.branch);
+        let path_str = worktree_path.display().to_string();
+        let mut rows: Vec<(String, String)> = Vec::new();
+
+        // git worktree add
+        let git_args = if opts.create_branch {
+            if let Some(from) = &opts.from {
+                format!("add -b {} {} {}", opts.branch, path_str, from)
+            } else {
+                format!("add -b {} {}", opts.branch, path_str)
+            }
+        } else {
+            format!("add {} {}", path_str, opts.branch)
+        };
+        rows.push(("git worktree".to_string(), git_args));
+
+        // pre_create フック
+        for cmd in &self.cfg.hooks.pre_create {
+            rows.push((
+                "hook pre".to_string(),
+                format!("{}  (cwd: {})", cmd, self.repo_root.display()),
+            ));
+        }
+
+        // post_create フック
+        for cmd in &self.cfg.hooks.post_create {
+            rows.push((
+                "hook post".to_string(),
+                format!("{}  (cwd: {})", cmd, path_str),
+            ));
+        }
+
+        // copy + post_copy フック
+        let has_copy = !self.cfg.copy.patterns.is_empty() || !self.cfg.copy.files.is_empty();
+        if has_copy {
+            for pattern in &self.cfg.copy.patterns {
+                rows.push((
+                    "copy (glob)".to_string(),
+                    format!("{} → {}/*", pattern, path_str),
+                ));
+            }
+            for file in &self.cfg.copy.files {
+                rows.push((
+                    "copy (file)".to_string(),
+                    format!("{} → {}/{}", file.from, path_str, file.to),
+                ));
+            }
+            for cmd in &self.cfg.hooks.post_copy {
+                rows.push((
+                    "hook post-copy".to_string(),
+                    format!("{}  (cwd: {})", cmd, path_str),
+                ));
+            }
+        }
+
+        super::DryRunPlan {
+            title: format!("[dry-run] wtxr add {}", opts.branch),
+            rows,
+        }
+    }
+
     pub fn execute(&self, opts: &AddOptions) -> anyhow::Result<()> {
         let worktree_path = resolve_worktree_path(self.repo_root, self.cfg, &opts.branch);
 

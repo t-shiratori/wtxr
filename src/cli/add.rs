@@ -6,7 +6,6 @@ use crate::adapter::hook::ShellHookRunner;
 use crate::config::load_config;
 use crate::domain::worktree::AddOptions;
 use crate::logger;
-use crate::port::git::GitRepository;
 use crate::spinner::Spinner;
 use crate::usecase::add::AddWorktree;
 
@@ -39,8 +38,12 @@ pub fn run(args: &AddArgs) -> anyhow::Result<()> {
         from: args.from.clone(),
     };
 
+    let fs = FsAdapter::new();
+    let hooks = ShellHookRunner::new();
+    let uc = AddWorktree::new(&git, &fs, &hooks, &cfg, &repo_root);
+
     if args.dry_run {
-        print_dry_run(&opts, &cfg, &repo_root);
+        uc.plan(&opts).print();
         return Ok(());
     }
 
@@ -48,10 +51,6 @@ pub fn run(args: &AddArgs) -> anyhow::Result<()> {
     logger::verbose(&format!("branch: {}", opts.branch));
 
     let spinner = Spinner::new(&format!("Adding worktree for '{}'…", opts.branch));
-
-    let fs = FsAdapter::new();
-    let hooks = ShellHookRunner::new();
-    let uc = AddWorktree::new(&git, &fs, &hooks, &cfg, &repo_root);
 
     match uc.execute(&opts) {
         Ok(()) => spinner.success(&format!("Added worktree for '{}'", opts.branch)),
@@ -62,23 +61,4 @@ pub fn run(args: &AddArgs) -> anyhow::Result<()> {
     }
 
     Ok(())
-}
-
-fn print_dry_run(
-    opts: &AddOptions,
-    cfg: &crate::config::Config,
-    repo_root: &std::path::Path,
-) {
-    use crate::config::paths::resolve_worktree_path;
-
-    let path = resolve_worktree_path(repo_root, cfg, &opts.branch);
-    println!("[dry-run] add worktree");
-    println!("  branch : {}", opts.branch);
-    println!("  path   : {}", path.display());
-    if let Some(from) = &opts.from {
-        println!("  from   : {}", from);
-    }
-    if opts.create_branch {
-        println!("  create : true");
-    }
 }

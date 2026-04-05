@@ -60,26 +60,24 @@ pub fn run(args: &RemoveArgs) -> anyhow::Result<()> {
     };
 
     for path in &paths {
+        let opts = RemoveOptions {
+            path: path.to_path_buf(),
+            delete_branch: args.delete_branch,
+            force: args.force,
+        };
+        let uc = RemoveWorktree::new(&git, &cfg, &repo_root);
+
         if args.dry_run {
-            print_dry_run(path, args);
+            uc.plan(&opts).print();
             continue;
         }
 
         logger::verbose(&format!("removing: {}", path.display()));
 
         let path_str = path.to_string_lossy().into_owned();
-        let label = path.file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or(&path_str);
+        let label = path.file_name().and_then(|n| n.to_str()).unwrap_or(&path_str);
         let spinner = Spinner::new(&format!("Removing '{label}'…"));
 
-        let opts = RemoveOptions {
-            path: path.to_path_buf(),
-            delete_branch: args.delete_branch,
-            force: args.force,
-        };
-
-        let uc = RemoveWorktree::new(&git, &cfg, &repo_root);
         match uc.execute(&opts) {
             Ok(()) => spinner.success(&format!("Removed '{}'", path.display())),
             Err(e) => {
@@ -90,11 +88,4 @@ pub fn run(args: &RemoveArgs) -> anyhow::Result<()> {
     }
 
     Ok(())
-}
-
-fn print_dry_run(path: &std::path::Path, args: &RemoveArgs) {
-    println!("[dry-run] remove worktree");
-    println!("  path          : {}", path.display());
-    println!("  delete-branch : {}", args.delete_branch);
-    println!("  force         : {}", args.force);
 }

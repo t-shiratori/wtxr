@@ -17,6 +17,29 @@ impl<'a> RemoveWorktree<'a> {
         Self { git, cfg, repo_root }
     }
 
+    /// dry-run 用: 実際の操作は行わず実行予定の操作一覧を返す
+    pub fn plan(&self, opts: &RemoveOptions) -> super::DryRunPlan {
+        let mut rows: Vec<(String, String)> = Vec::new();
+
+        let mut git_args = format!("remove {}", opts.path.display());
+        if opts.force {
+            git_args.push_str(" --force");
+        }
+        rows.push(("git worktree".to_string(), git_args));
+
+        if opts.delete_branch {
+            rows.push((
+                "git branch".to_string(),
+                format!("-d <branch of {}>", opts.path.display()),
+            ));
+        }
+
+        super::DryRunPlan {
+            title: format!("[dry-run] wtxr remove {}", opts.path.display()),
+            rows,
+        }
+    }
+
     pub fn execute(&self, opts: &RemoveOptions) -> anyhow::Result<()> {
         // ブランチ削除が必要なら先にブランチ名を取得しておく
         let branch = if opts.delete_branch {
