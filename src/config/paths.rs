@@ -47,16 +47,6 @@ pub fn resolve_input_worktree_path(
     Ok(resolve_worktrees_dir(repo_root, cfg).join(input))
 }
 
-/// グローバル設定ファイルのパスを返す (~/.config/wtxr/config.toml)
-pub fn global_config_path() -> Option<PathBuf> {
-    dirs::config_dir().map(|d| d.join("wtxr").join("config.toml"))
-}
-
-/// ローカル設定ファイルのパスを返す (<repo_root>/.wtxr/config.toml)
-pub fn local_config_path(repo_root: &Path) -> PathBuf {
-    repo_root.join(".wtxr").join("config.toml")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

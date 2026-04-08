@@ -19,8 +19,3 @@ pub fn verbose(msg: &str) {
         eprintln!("{} {}", "·".dimmed(), msg.dimmed());
     }
 }
-
-/// 常に表示するエラーメッセージ
-pub fn error(msg: &str) {
-    eprintln!("{} {}", "✗".red().bold(), msg);
-}
