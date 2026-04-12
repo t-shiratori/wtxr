@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2021"
 description = "A git worktree management CLI tool"
 license = "MIT"
+repository = "https://github.com/t-shiratori/wtxr"
+homepage = "https://github.com/t-shiratori/wtxr"
 
 [dependencies]
 # CLI
@@ -33,3 +35,8 @@ glob = "0.3"
 [dev-dependencies]
 # テスト用一時ディレクトリ
 tempfile = "3"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
