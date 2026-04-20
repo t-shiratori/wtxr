@@ -1,6 +1,6 @@
 # wtxr
 
-> This tool was created as an experiment to see what it would look like to reimplement [wtx](https://github.com/t-shiratori/wtx) (a TypeScript implementation) in Rust.
+> This tool was created as an experiment to see what it would look like to reimplement [wtx](https://github.com/t-shiratori/wtx) (a Go implementation) in Rust.
 
 A CLI tool for managing Git worktrees easily. Create, remove, and list worktrees with simple commands.
 
