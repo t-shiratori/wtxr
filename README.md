@@ -1,5 +1,7 @@
 # wtxr
 
+> このツールは [wtx](https://github.com/t-shiratori/wtx)（TypeScript 実装）を Rust で実装したらどうなるかを実験するために作成したものです。
+
 Git worktree を簡単に管理できる CLI ツールです。worktree の作成・削除・一覧表示をシンプルなコマンドで行えます。
 
 ## 機能
